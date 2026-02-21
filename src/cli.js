@@ -1,0 +1,219 @@
+import path from "node:path";
+import {
+  getConfigPath,
+  getRepoSettings,
+  listRepoSettings,
+  loadConfig,
+  registerRepo,
+  removeRepo,
+  updateRepoSettings,
+} from "./config.js";
+import { ensureRepoRoot } from "./git.js";
+import { AutoCommitDaemon } from "./watcher.js";
+
+function printHelp() {
+  console.log(`
+autocommit - branch-aware auto-commit daemon
+
+Usage:
+  autocommit watch [repoPath ...]
+  autocommit register [repoPath]
+  autocommit unregister [repoPath]
+  autocommit repos
+  autocommit status [repoPath]
+  autocommit on [repoPath]
+  autocommit off [repoPath]
+  autocommit push on [repoPath]
+  autocommit push off [repoPath]
+  autocommit debounce <ms> [repoPath]
+  autocommit type <commitType> [repoPath]
+
+Notes:
+  - repoPath defaults to current working directory.
+  - "watch" without repoPath watches all registered repos.
+  - Config file: ${getConfigPath()}
+  - Set OPENAI_API_KEY to enable OpenAI-generated summary fragments.
+`.trim());
+}
+
+async function resolveRepoPath(inputPath) {
+  const source = inputPath ? path.resolve(inputPath) : process.cwd();
+  return ensureRepoRoot(source);
+}
+
+async function resolveManyRepoPaths(paths) {
+  const resolved = [];
+  for (const inputPath of paths) {
+    const repoRoot = await resolveRepoPath(inputPath);
+    if (!resolved.includes(repoRoot)) {
+      resolved.push(repoRoot);
+    }
+  }
+  return resolved;
+}
+
+function printRepo(settings) {
+  console.log(
+    `${settings.path}
+  enabled=${settings.enabled}
+  autoPush=${settings.autoPush}
+  debounceMs=${settings.debounceMs}
+  commitType=${settings.commitType}`,
+  );
+}
+
+async function commandRegister(args) {
+  const repoPath = await resolveRepoPath(args[0]);
+  const settings = await registerRepo(repoPath);
+  console.log(`[register] ${settings.path}`);
+  printRepo(settings);
+}
+
+async function commandUnregister(args) {
+  const repoPath = await resolveRepoPath(args[0]);
+  await removeRepo(repoPath);
+  console.log(`[unregister] ${repoPath}`);
+}
+
+async function commandRepos() {
+  const config = await loadConfig();
+  const repos = listRepoSettings(config);
+  if (!repos.length) {
+    console.log("No registered repos.");
+    return;
+  }
+  for (const repo of repos) {
+    printRepo(repo);
+  }
+}
+
+async function commandStatus(args) {
+  const repoPath = await resolveRepoPath(args[0]);
+  const config = await loadConfig();
+  const settings = getRepoSettings(config, repoPath);
+
+  if (!settings) {
+    console.log(`[status] ${repoPath} is not registered`);
+    return;
+  }
+  printRepo(settings);
+}
+
+async function commandEnabled(enabled, args) {
+  const repoPath = await resolveRepoPath(args[0]);
+  const settings = await updateRepoSettings(repoPath, { enabled });
+  console.log(`[enabled=${enabled}] ${settings.path}`);
+}
+
+async function commandPush(autoPush, args) {
+  const repoPath = await resolveRepoPath(args[1]);
+  const settings = await updateRepoSettings(repoPath, { autoPush });
+  console.log(`[autoPush=${autoPush}] ${settings.path}`);
+}
+
+async function commandDebounce(args) {
+  const debounceMs = Number(args[0]);
+  if (!Number.isFinite(debounceMs) || debounceMs < 1000) {
+    throw new Error("debounce must be a number >= 1000");
+  }
+  const repoPath = await resolveRepoPath(args[1]);
+  const settings = await updateRepoSettings(repoPath, { debounceMs });
+  console.log(`[debounceMs=${settings.debounceMs}] ${settings.path}`);
+}
+
+async function commandType(args) {
+  const commitType = (args[0] ?? "").trim();
+  if (!commitType) {
+    throw new Error("commit type cannot be empty");
+  }
+  if (/\s/.test(commitType)) {
+    throw new Error("commit type cannot contain spaces");
+  }
+  const repoPath = await resolveRepoPath(args[1]);
+  const settings = await updateRepoSettings(repoPath, { commitType });
+  console.log(`[commitType=${settings.commitType}] ${settings.path}`);
+}
+
+async function commandWatch(args) {
+  let repoPaths = [];
+
+  if (args.length > 0) {
+    repoPaths = await resolveManyRepoPaths(args);
+    for (const repoPath of repoPaths) {
+      await registerRepo(repoPath);
+    }
+  } else {
+    const config = await loadConfig();
+    repoPaths = listRepoSettings(config).map((repo) => repo.path);
+    if (!repoPaths.length) {
+      const repoPath = await resolveRepoPath();
+      await registerRepo(repoPath);
+      repoPaths = [repoPath];
+    }
+  }
+
+  const daemon = new AutoCommitDaemon(repoPaths, (line) => console.log(line));
+  await daemon.start();
+
+  const shutdown = async () => {
+    await daemon.stop();
+    process.exit(0);
+  };
+
+  process.on("SIGINT", shutdown);
+  process.on("SIGTERM", shutdown);
+
+  console.log(`[running] watching ${repoPaths.length} repo(s)`);
+}
+
+export async function runCli(argv) {
+  const [command, ...args] = argv;
+
+  if (!command || command === "help" || command === "--help" || command === "-h") {
+    printHelp();
+    return;
+  }
+
+  switch (command) {
+    case "watch":
+    case "start":
+      await commandWatch(args);
+      return;
+    case "register":
+      await commandRegister(args);
+      return;
+    case "unregister":
+      await commandUnregister(args);
+      return;
+    case "repos":
+      await commandRepos();
+      return;
+    case "status":
+      await commandStatus(args);
+      return;
+    case "on":
+      await commandEnabled(true, args);
+      return;
+    case "off":
+      await commandEnabled(false, args);
+      return;
+    case "push":
+      if (args[0] === "on") {
+        await commandPush(true, args);
+        return;
+      }
+      if (args[0] === "off") {
+        await commandPush(false, args);
+        return;
+      }
+      throw new Error('Usage: autocommit push <on|off> [repoPath]');
+    case "debounce":
+      await commandDebounce(args);
+      return;
+    case "type":
+      await commandType(args);
+      return;
+    default:
+      throw new Error(`Unknown command: ${command}`);
+  }
+}

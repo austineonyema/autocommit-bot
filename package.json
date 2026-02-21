@@ -1,0 +1,27 @@
+{
+  "name": "git-autocommit-flow",
+  "version": "0.1.0",
+  "description": "Branch-aware auto-commit daemon with optional auto-push and AI-style commit summaries.",
+  "type": "module",
+  "bin": {
+    "autocommit": "./bin/autocommit.js"
+  },
+  "scripts": {
+    "start": "node ./bin/autocommit.js",
+    "watch": "node ./bin/autocommit.js watch"
+  },
+  "keywords": [
+    "git",
+    "autocommit",
+    "automation",
+    "watcher",
+    "cli"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "chokidar": "^3.6.0"
+  }
+}
