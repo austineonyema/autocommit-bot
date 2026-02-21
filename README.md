@@ -53,6 +53,8 @@ autocommit off [repoPath]
 autocommit push on [repoPath]
 autocommit push off [repoPath]
 autocommit debounce <ms> [repoPath]
+autocommit max-interval <ms> [repoPath]
+autocommit min-interval <ms> [repoPath]
 autocommit type <commitType> [repoPath]
 ```
 
@@ -60,7 +62,17 @@ Notes:
 
 - `repoPath` defaults to current directory.
 - `watch` without arguments watches all registered repos.
+- `max-interval=0` disables forced periodic commits.
+- `min-interval=0` disables minimum spacing between commits.
 - If a branch has no upstream and auto-push is on, first push uses `git push -u origin <branch>`.
+
+## Cadence model
+
+Commits can happen from three triggers:
+
+- `idle`: no file changes for `debounce` duration.
+- `max-interval`: long continuous activity forces checkpoint commits.
+- `min-interval`: spacing guard that prevents over-frequent commits.
 
 ## OpenAI summary support (optional)
 

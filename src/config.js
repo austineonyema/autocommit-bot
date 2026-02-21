@@ -9,6 +9,8 @@ const DEFAULTS = {
   enabled: true,
   autoPush: false,
   debounceMs: 30000,
+  maxCommitIntervalMs: 120000,
+  minCommitIntervalMs: 20000,
   commitType: "feat",
 };
 
@@ -50,6 +52,10 @@ export function getRepoSettings(config, repoPath) {
     enabled: repo.enabled ?? config.defaults.enabled,
     autoPush: repo.autoPush ?? config.defaults.autoPush,
     debounceMs: repo.debounceMs ?? config.defaults.debounceMs,
+    maxCommitIntervalMs:
+      repo.maxCommitIntervalMs ?? config.defaults.maxCommitIntervalMs,
+    minCommitIntervalMs:
+      repo.minCommitIntervalMs ?? config.defaults.minCommitIntervalMs,
     commitType: repo.commitType ?? config.defaults.commitType,
   };
 }
@@ -62,6 +68,8 @@ export async function ensureRepo(config, repoPath) {
       enabled: config.defaults.enabled,
       autoPush: config.defaults.autoPush,
       debounceMs: config.defaults.debounceMs,
+      maxCommitIntervalMs: config.defaults.maxCommitIntervalMs,
+      minCommitIntervalMs: config.defaults.minCommitIntervalMs,
       commitType: config.defaults.commitType,
     };
   }
@@ -99,6 +107,10 @@ export function listRepoSettings(config) {
     enabled: repo.enabled ?? config.defaults.enabled,
     autoPush: repo.autoPush ?? config.defaults.autoPush,
     debounceMs: repo.debounceMs ?? config.defaults.debounceMs,
+    maxCommitIntervalMs:
+      repo.maxCommitIntervalMs ?? config.defaults.maxCommitIntervalMs,
+    minCommitIntervalMs:
+      repo.minCommitIntervalMs ?? config.defaults.minCommitIntervalMs,
     commitType: repo.commitType ?? config.defaults.commitType,
   }));
 }

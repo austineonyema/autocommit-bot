@@ -26,11 +26,15 @@ Usage:
   autocommit push on [repoPath]
   autocommit push off [repoPath]
   autocommit debounce <ms> [repoPath]
+  autocommit max-interval <ms> [repoPath]
+  autocommit min-interval <ms> [repoPath]
   autocommit type <commitType> [repoPath]
 
 Notes:
   - repoPath defaults to current working directory.
   - "watch" without repoPath watches all registered repos.
+  - max-interval=0 disables forced periodic commits.
+  - min-interval=0 disables commit spacing guard.
   - Config file: ${getConfigPath()}
   - Set OPENAI_API_KEY to enable OpenAI-generated summary fragments.
 `.trim());
@@ -58,6 +62,8 @@ function printRepo(settings) {
   enabled=${settings.enabled}
   autoPush=${settings.autoPush}
   debounceMs=${settings.debounceMs}
+  maxCommitIntervalMs=${settings.maxCommitIntervalMs}
+  minCommitIntervalMs=${settings.minCommitIntervalMs}
   commitType=${settings.commitType}`,
   );
 }
@@ -132,6 +138,26 @@ async function commandType(args) {
   const repoPath = await resolveRepoPath(args[1]);
   const settings = await updateRepoSettings(repoPath, { commitType });
   console.log(`[commitType=${settings.commitType}] ${settings.path}`);
+}
+
+async function commandMaxInterval(args) {
+  const maxCommitIntervalMs = Number(args[0]);
+  if (!Number.isFinite(maxCommitIntervalMs) || maxCommitIntervalMs < 0) {
+    throw new Error("max-interval must be a number >= 0");
+  }
+  const repoPath = await resolveRepoPath(args[1]);
+  const settings = await updateRepoSettings(repoPath, { maxCommitIntervalMs });
+  console.log(`[maxCommitIntervalMs=${settings.maxCommitIntervalMs}] ${settings.path}`);
+}
+
+async function commandMinInterval(args) {
+  const minCommitIntervalMs = Number(args[0]);
+  if (!Number.isFinite(minCommitIntervalMs) || minCommitIntervalMs < 0) {
+    throw new Error("min-interval must be a number >= 0");
+  }
+  const repoPath = await resolveRepoPath(args[1]);
+  const settings = await updateRepoSettings(repoPath, { minCommitIntervalMs });
+  console.log(`[minCommitIntervalMs=${settings.minCommitIntervalMs}] ${settings.path}`);
 }
 
 async function commandWatch(args) {
@@ -209,6 +235,12 @@ export async function runCli(argv) {
       throw new Error('Usage: autocommit push <on|off> [repoPath]');
     case "debounce":
       await commandDebounce(args);
+      return;
+    case "max-interval":
+      await commandMaxInterval(args);
+      return;
+    case "min-interval":
+      await commandMinInterval(args);
       return;
     case "type":
       await commandType(args);
