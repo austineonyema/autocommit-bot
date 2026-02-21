@@ -52,7 +52,7 @@ export class AutoCommitDaemon {
 
   async start() {
     for (const repoPath of this.repoPaths) {
-      this.startWatcher(repoPath);
+      await this.startWatcher(repoPath);
       this.logger(`[watch] ${repoPath}`);
     }
   }
@@ -67,7 +67,14 @@ export class AutoCommitDaemon {
     this.states.clear();
   }
 
-  startWatcher(repoPath) {
+  async startWatcher(repoPath) {
+    const config = await loadConfig();
+    const settings = getRepoSettings(config, repoPath);
+    const initialDebounce =
+      Number(settings?.debounceMs) > 0
+        ? Number(settings.debounceMs)
+        : DEFAULT_DEBOUNCE_MS;
+
     const watcher = chokidar.watch(repoPath, {
       ignored: shouldIgnore,
       ignoreInitial: true,
@@ -83,7 +90,7 @@ export class AutoCommitDaemon {
       timer: null,
       inFlight: false,
       pending: false,
-      debounceMs: DEFAULT_DEBOUNCE_MS,
+      debounceMs: initialDebounce,
     };
 
     watcher.on("all", (event, filePath) => {

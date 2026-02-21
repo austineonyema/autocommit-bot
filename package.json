@@ -3,12 +3,16 @@
   "version": "0.1.0",
   "description": "Branch-aware auto-commit daemon with optional auto-push and AI-style commit summaries.",
   "type": "module",
+  "main": "./src/cli.js",
   "bin": {
     "autocommit": "./bin/autocommit.js"
   },
   "scripts": {
     "start": "node ./bin/autocommit.js",
-    "watch": "node ./bin/autocommit.js watch"
+    "watch": "node ./bin/autocommit.js watch",
+    "check": "node --check ./src/cli.js && node --check ./src/watcher.js && node --check ./src/summarizer.js",
+    "test:smoke": "node ./bin/autocommit.js --help",
+    "prepublishOnly": "npm run check && npm run test:smoke"
   },
   "keywords": [
     "git",
@@ -16,6 +20,12 @@
     "automation",
     "watcher",
     "cli"
+  ],
+  "files": [
+    "bin/",
+    "src/",
+    "README.md",
+    "LICENSE"
   ],
   "license": "MIT",
   "engines": {

@@ -70,6 +70,12 @@ Set an API key to generate richer summary text:
 export OPENAI_API_KEY=...
 ```
 
+PowerShell:
+
+```powershell
+$env:OPENAI_API_KEY="..."
+```
+
 Optional model override:
 
 ```bash
@@ -87,3 +93,27 @@ Global config file:
 ```
 
 Repo-level settings are stored under each repo entry in that config.
+
+## Quick test flow
+
+```bash
+autocommit register .
+autocommit debounce 2000 .
+autocommit push off .
+autocommit watch .
+```
+
+Then edit a file and wait a few seconds. Verify:
+
+```bash
+git log -1 --pretty=format:"%h %s"
+```
+
+## Publish checklist
+
+```bash
+npm install
+npm run check
+npm run test:smoke
+npm publish --access public
+```
