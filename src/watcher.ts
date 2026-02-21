@@ -1,5 +1,6 @@
 import chokidar from "chokidar";
 import path from "node:path";
+import type { RepoSettings } from "./config.js";
 import {
   commit,
   getBranch,
@@ -26,7 +27,28 @@ const IGNORED_DIRS = [
   ".turbo",
 ];
 
-function shouldIgnore(watchPath) {
+type FlushTrigger = {
+  reason: "idle" | "max-interval" | "min-interval";
+  event: string;
+  filePath: string;
+};
+
+type WatchState = {
+  watcher: chokidar.FSWatcher;
+  idleTimer: NodeJS.Timeout | null;
+  maxIntervalTimer: NodeJS.Timeout | null;
+  minIntervalTimer: NodeJS.Timeout | null;
+  inFlight: boolean;
+  pending: boolean;
+  debounceMs: number;
+  maxCommitIntervalMs: number;
+  minCommitIntervalMs: number;
+  lastCommitAt: number;
+  lastEvent: string;
+  lastFilePath: string;
+};
+
+function shouldIgnore(watchPath: string): boolean {
   const normalized = watchPath.replace(/\\/g, "/");
   return IGNORED_DIRS.some(
     (segment) =>
@@ -34,32 +56,36 @@ function shouldIgnore(watchPath) {
   );
 }
 
-function formatTimestamp(date = new Date()) {
-  const pad = (value) => String(value).padStart(2, "0");
+function formatTimestamp(date: Date = new Date()): string {
+  const pad = (value: number) => String(value).padStart(2, "0");
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(
     date.getDate(),
   )} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
 }
 
-function oneLine(text) {
+function oneLine(text: string): string {
   return text.replace(/\s+/g, " ").trim();
 }
 
 export class AutoCommitDaemon {
-  constructor(repoPaths, logger = console.log) {
+  private repoPaths: string[];
+  private logger: (line: string) => void;
+  private states: Map<string, WatchState>;
+
+  constructor(repoPaths: string[], logger: (line: string) => void = console.log) {
     this.repoPaths = [...new Set(repoPaths.map((repoPath) => path.resolve(repoPath)))];
     this.logger = logger;
     this.states = new Map();
   }
 
-  async start() {
+  async start(): Promise<void> {
     for (const repoPath of this.repoPaths) {
       await this.startWatcher(repoPath);
       this.logger(`[watch] ${repoPath}`);
     }
   }
 
-  async stop() {
+  async stop(): Promise<void> {
     const shutdown = [];
     for (const state of this.states.values()) {
       if (state.idleTimer) clearTimeout(state.idleTimer);
@@ -71,7 +97,13 @@ export class AutoCommitDaemon {
     this.states.clear();
   }
 
-  applyTimingSettings(state, settings) {
+  private applyTimingSettings(
+    state: WatchState,
+    settings: Pick<
+      RepoSettings,
+      "debounceMs" | "maxCommitIntervalMs" | "minCommitIntervalMs"
+    >,
+  ): void {
     const debounceMs = Number(settings.debounceMs);
     const maxCommitIntervalMs = Number(settings.maxCommitIntervalMs);
     const minCommitIntervalMs = Number(settings.minCommitIntervalMs);
@@ -87,7 +119,7 @@ export class AutoCommitDaemon {
         : DEFAULT_MIN_COMMIT_INTERVAL_MS;
   }
 
-  async startWatcher(repoPath) {
+  private async startWatcher(repoPath: string): Promise<void> {
     const config = await loadConfig();
     const settings = getRepoSettings(config, repoPath);
     const initialSettings = {
@@ -104,7 +136,7 @@ export class AutoCommitDaemon {
       persistent: true,
     });
 
-    const state = {
+    const state: WatchState = {
       watcher,
       idleTimer: null,
       maxIntervalTimer: null,
@@ -120,21 +152,21 @@ export class AutoCommitDaemon {
     };
     this.applyTimingSettings(state, initialSettings);
 
-    watcher.on("all", (event, filePath) => {
+    watcher.on("all", (event: string, filePath: string) => {
       state.pending = true;
       state.lastEvent = event;
       state.lastFilePath = filePath;
       this.scheduleIdleFlush(repoPath, event, filePath);
       this.scheduleMaxIntervalFlush(repoPath);
     });
-    watcher.on("error", (error) => {
+    watcher.on("error", (error: Error) => {
       this.logger(`[watch:${path.basename(repoPath)}] watcher error: ${error.message}`);
     });
 
     this.states.set(repoPath, state);
   }
 
-  scheduleIdleFlush(repoPath, event, filePath) {
+  private scheduleIdleFlush(repoPath: string, event: string, filePath: string): void {
     const state = this.states.get(repoPath);
     if (!state) return;
 
@@ -150,7 +182,7 @@ export class AutoCommitDaemon {
     }, state.debounceMs);
   }
 
-  scheduleMaxIntervalFlush(repoPath) {
+  private scheduleMaxIntervalFlush(repoPath: string): void {
     const state = this.states.get(repoPath);
     if (!state) return;
 
@@ -168,7 +200,7 @@ export class AutoCommitDaemon {
     }, state.maxCommitIntervalMs);
   }
 
-  scheduleMinIntervalFlush(repoPath, waitMs) {
+  private scheduleMinIntervalFlush(repoPath: string, waitMs: number): void {
     const state = this.states.get(repoPath);
     if (!state || waitMs <= 0) return;
 
@@ -186,19 +218,19 @@ export class AutoCommitDaemon {
     }, waitMs);
   }
 
-  clearMaxIntervalTimer(state) {
+  private clearMaxIntervalTimer(state: WatchState): void {
     if (!state.maxIntervalTimer) return;
     clearTimeout(state.maxIntervalTimer);
     state.maxIntervalTimer = null;
   }
 
-  clearMinIntervalTimer(state) {
+  private clearMinIntervalTimer(state: WatchState): void {
     if (!state.minIntervalTimer) return;
     clearTimeout(state.minIntervalTimer);
     state.minIntervalTimer = null;
   }
 
-  async flush(repoPath, trigger) {
+  private async flush(repoPath: string, trigger: FlushTrigger): Promise<void> {
     const state = this.states.get(repoPath);
     if (!state) return;
 
@@ -284,7 +316,7 @@ export class AutoCommitDaemon {
         this.logger(`[push:${path.basename(repoPath)}] pushed ${branch}`);
       }
     } catch (error) {
-      this.logger(`[error:${path.basename(repoPath)}] ${error?.message ?? error}`);
+      this.logger(`[error:${path.basename(repoPath)}] ${(error as Error)?.message ?? error}`);
     } finally {
       state.inFlight = false;
       if (state.pending) {

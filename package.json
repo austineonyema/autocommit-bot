@@ -3,15 +3,18 @@
   "version": "0.1.0",
   "description": "Branch-aware auto-commit daemon with optional auto-push and AI-style commit summaries.",
   "type": "module",
-  "main": "./src/cli.js",
+  "main": "./dist/cli.js",
+  "types": "./dist/cli.d.ts",
   "bin": {
     "autocommit": "./bin/autocommit.js"
   },
   "scripts": {
-    "start": "node ./bin/autocommit.js",
-    "watch": "node ./bin/autocommit.js watch",
-    "check": "node --check ./src/cli.js && node --check ./src/watcher.js && node --check ./src/summarizer.js",
-    "test:smoke": "node ./bin/autocommit.js --help",
+    "build": "tsc -p tsconfig.json",
+    "prepare": "npm run build",
+    "start": "npm run build && node ./bin/autocommit.js",
+    "watch": "npm run build && node ./bin/autocommit.js watch",
+    "check": "tsc --noEmit -p tsconfig.json",
+    "test:smoke": "npm run build && node ./bin/autocommit.js --help",
     "prepublishOnly": "npm run check && npm run test:smoke"
   },
   "keywords": [
@@ -23,7 +26,7 @@
   ],
   "files": [
     "bin/",
-    "src/",
+    "dist/",
     "README.md",
     "LICENSE"
   ],
@@ -33,5 +36,9 @@
   },
   "dependencies": {
     "chokidar": "^3.6.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.2"
   }
 }

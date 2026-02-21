@@ -1,7 +1,12 @@
 import path from "node:path";
 import { getStagedNameStatus, getStagedShortStat } from "./git.js";
 
-function parseNameStatus(nameStatusText) {
+type NameStatusEntry = {
+  status: string;
+  file: string;
+};
+
+function parseNameStatus(nameStatusText: string): NameStatusEntry[] {
   const lines = nameStatusText
     .split("\n")
     .map((line) => line.trim())
@@ -15,7 +20,7 @@ function parseNameStatus(nameStatusText) {
   });
 }
 
-function buildHeuristicSummary(entries) {
+function buildHeuristicSummary(entries: NameStatusEntry[]): string {
   if (!entries.length) {
     return "update project files";
   }
@@ -27,7 +32,7 @@ function buildHeuristicSummary(entries) {
     renamed: 0,
   };
 
-  const areas = new Map();
+  const areas = new Map<string, number>();
 
   for (const entry of entries) {
     if (entry.status.startsWith("A")) statusBuckets.added += 1;
@@ -59,7 +64,12 @@ function buildHeuristicSummary(entries) {
   return `refine ${areaText} (${entries.length} files touched)`;
 }
 
-async function buildOpenAiSummary({ branch, nameStatusText, shortStat }) {
+async function buildOpenAiSummary(params: {
+  branch: string;
+  nameStatusText: string;
+  shortStat: string;
+}): Promise<string | null> {
+  const { branch, nameStatusText, shortStat } = params;
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
     return null;
@@ -96,15 +106,21 @@ async function buildOpenAiSummary({ branch, nameStatusText, shortStat }) {
       return null;
     }
 
-    const data = await response.json();
+    const data = (await response.json()) as {
+      output_text?: string;
+      output?: Array<{
+        content?: Array<{ text?: string }>;
+      }>;
+    };
+
     const text =
       data.output_text ||
       data.output
         ?.flatMap((item) => item.content ?? [])
-        ?.map((c) => c.text)
-        ?.filter(Boolean)
-        ?.join(" ")
-        ?.trim();
+        .map((content) => content.text)
+        .filter((value): value is string => Boolean(value))
+        .join(" ")
+        .trim();
 
     return text || null;
   } catch {
@@ -112,7 +128,10 @@ async function buildOpenAiSummary({ branch, nameStatusText, shortStat }) {
   }
 }
 
-export async function generateSummary(repoPath, branch) {
+export async function generateSummary(
+  repoPath: string,
+  branch: string,
+): Promise<string> {
   const [nameStatusText, shortStat] = await Promise.all([
     getStagedNameStatus(repoPath),
     getStagedShortStat(repoPath),

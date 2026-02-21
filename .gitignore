@@ -2,3 +2,4 @@ node_modules
 npm-debug.log*
 .autocommit-test.txt
 watch-test*.log
+dist

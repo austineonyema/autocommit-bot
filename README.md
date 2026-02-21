@@ -30,6 +30,7 @@ feat(dashboard): auto [2026-02-21 16:48:12] AI: optimize performance exports and
 git clone <your-repo-url>
 cd autocommit-bot
 npm install
+npm run build
 node ./bin/autocommit.js --help
 ```
 
